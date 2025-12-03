@@ -82,34 +82,32 @@ func BuildScalingPolicyBinding(model *workload.ModelBooster, backend *workload.M
 			APIVersion: workload.AutoscalingPolicyBindingKind.GroupVersion().String(),
 			Kind:       workload.AutoscalingPolicyBindingKind.Kind,
 		},
-		ObjectMeta: *BuildPolicyBindingMeta(spec, model, backend.Name, name),
+		ObjectMeta: *BuildPolicyBindingMeta(spec, model, "", name),
 		Spec:       *spec,
 	}
 }
 
 func BuildOptimizePolicyBindingSpec(model *workload.ModelBooster, name string) *workload.AutoscalingPolicyBindingSpec {
-	params := make([]workload.OptimizerParam, 0, len(model.Spec.Backends))
 	if model.Spec.CostExpansionRatePercent == nil {
 		klog.Error("ModelBooster", model.Name, "Spec.CostExpansionRatePercent can not be nil when set optimize autoscaling policy")
 		return nil
 	}
-	for _, backend := range model.Spec.Backends {
-		targetName := utils.GetBackendResourceName(model.Name, backend.Name)
-		params = append(params, workload.OptimizerParam{
-			Target: workload.Target{
-				TargetRef: corev1.ObjectReference{
-					Name: targetName,
-					Kind: workload.ModelServingKind.Kind,
-				},
-				AdditionalMatchLabels: map[string]string{
-					workload.RoleLabelKey: workload.ModelServingEntryPodLeaderLabel,
-				},
+	backend := model.Spec.Backend
+	targetName := utils.GetBackendResourceName(model.Name, backend.Name)
+	params := []workload.OptimizerParam{{
+		Target: workload.Target{
+			TargetRef: corev1.ObjectReference{
+				Name: targetName,
+				Kind: workload.ModelServingKind.Kind,
 			},
-			MinReplicas: backend.MinReplicas,
-			MaxReplicas: backend.MaxReplicas,
-			Cost:        backend.ScalingCost,
-		})
-	}
+			AdditionalMatchLabels: map[string]string{
+				workload.RoleLabelKey: workload.ModelServingEntryPodLeaderLabel,
+			},
+		},
+		MinReplicas: backend.MinReplicas,
+		MaxReplicas: backend.MaxReplicas,
+		Cost:        backend.ScalingCost,
+	}}
 	return &workload.AutoscalingPolicyBindingSpec{
 		OptimizerConfiguration: &workload.OptimizerConfiguration{
 			Params:                   params,
