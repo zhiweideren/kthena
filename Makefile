@@ -62,9 +62,12 @@ gen-docs: crd-ref-docs ## Generate CRD and CLI reference documentation
 	# Generate Kthena CLI docs using a standalone doc-gen program
 	go run ./cli/kthena/internal/tools/docgen/main.go
 
-.PHONY: generate
-generate: controller-gen gen-crd gen-docs gen-copyright ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+.PHONY: gen-object
+gen-object: controller-gen ## Generate DeepCopy/Object code before CRDs
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+.PHONY: generate
+generate: gen-object gen-crd gen-docs gen-copyright ## Generate code containing DeepCopy, CRDs, docs and update client-go.
 	go mod tidy
 	./hack/update-codegen.sh
 

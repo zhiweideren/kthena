@@ -42,7 +42,7 @@ func TestBuildScalingPolicyBinding(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			backend := tt.input.Spec.Backend
-			got := BuildScalingPolicyBinding(tt.input, &backend, utils.GetBackendResourceName(tt.input.Name, ""))
+			got := BuildScalingPolicyBinding(tt.input, &backend, utils.GetBackendResourceName(tt.input.Name, backend.Name))
 			assert.Equal(t, tt.expected, got)
 		})
 	}

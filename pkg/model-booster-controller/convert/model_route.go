@@ -69,8 +69,9 @@ func getRules(model *workload.ModelBooster) []*networking.Rule {
 // getTargetModels returns the target models.
 func getTargetModels(model *workload.ModelBooster) []*networking.TargetModel {
 	var targetModels []*networking.TargetModel
+	backend := model.Spec.Backend
 	targetModels = append(targetModels, &networking.TargetModel{
-		ModelServerName: model.Name,
+		ModelServerName: utils.GetBackendResourceName(model.Name, backend.Name),
 	})
 	return targetModels
 }
