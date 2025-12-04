@@ -31,6 +31,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
+const (
+	ModelServingRoleKind = "Role"
+)
+
 // AutoscalingBindingValidator handles validation of AutoscalingPolicyBinding resources
 type AutoscalingBindingValidator struct {
 	client clientset.Interface
@@ -86,6 +90,7 @@ func (v *AutoscalingBindingValidator) validateAutoscalingBinding(asp_binding *wo
 
 	allErrs = append(allErrs, validateOptimizeAndScalingPolicyExistence(asp_binding)...)
 	allErrs = append(allErrs, v.validateAutoscalingPolicyExistence(ctx, asp_binding)...)
+	allErrs = append(allErrs, validateBindingTargetKind(asp_binding)...)
 
 	if len(allErrs) > 0 {
 		// Convert field errors to a formatted multi-line error message
@@ -114,11 +119,47 @@ func (v *AutoscalingBindingValidator) validateAutoscalingPolicyExistence(ctx con
 
 func validateOptimizeAndScalingPolicyExistence(asp_binding *workloadv1alpha1.AutoscalingPolicyBinding) field.ErrorList {
 	var allErrs field.ErrorList
-	if asp_binding.Spec.OptimizerConfiguration == nil && asp_binding.Spec.ScalingConfiguration == nil {
-		allErrs = append(allErrs, field.Required(field.NewPath("spec").Child("ScalingConfiguration"), "spec.ScalingConfiguration should be set if spec.OptimizerConfiguration does not exist"))
+	if asp_binding.Spec.HeterogeneousTarget == nil && asp_binding.Spec.HomogeneousTarget == nil {
+		allErrs = append(allErrs, field.Required(field.NewPath("spec").Child("homogeneousTarget"), "spec.homogeneousTarget should be set if spec.heterogeneousTarget does not exist"))
 	}
-	if asp_binding.Spec.OptimizerConfiguration != nil && asp_binding.Spec.ScalingConfiguration != nil {
-		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec").Child("ScalingConfiguration"), "both spec.OptimizerConfiguration and spec.ScalingConfiguration can not be set at the same time"))
+	if asp_binding.Spec.HeterogeneousTarget != nil && asp_binding.Spec.HomogeneousTarget != nil {
+		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec").Child("homogeneousTarget"), "both spec.heterogeneousTarget and spec.homogeneousTarget can not be set at the same time"))
 	}
+	return allErrs
+}
+
+func validateBindingTargetKind(asp_binding *workloadv1alpha1.AutoscalingPolicyBinding) field.ErrorList {
+	var allErrs field.ErrorList
+	if asp_binding.Spec.HeterogeneousTarget != nil {
+		for idx, param := range asp_binding.Spec.HeterogeneousTarget.Params {
+			if param.Target.TargetRef.Kind != "" && param.Target.TargetRef.Kind != workloadv1alpha1.ModelServingKind.Kind {
+				allErrs = append(allErrs, field.Invalid(field.NewPath("spec").Child("heterogeneousTarget").Child("params").Index(idx).Child("targetRef").Child("kind"), param.Target.TargetRef.Kind, fmt.Sprintf("heterogeneousTarget.params[].targetRef.kind must be ModelServing, but got %s", param.Target.TargetRef.Kind)))
+			}
+			if param.Target.SubTarget != nil {
+				allErrs = append(allErrs, field.Invalid(field.NewPath("spec").Child("heterogeneousTarget").Child("params").Index(idx).Child("targetRef").Child("subTarget"), param.Target.SubTarget, fmt.Sprintf("heterogeneousTarget.params[].targetRef.subTarget must be empty, but got %s", param.Target.SubTarget)))
+			}
+		}
+	}
+
+	if asp_binding.Spec.HomogeneousTarget != nil {
+		switch asp_binding.Spec.HomogeneousTarget.Target.TargetRef.Kind {
+		case "", workloadv1alpha1.ModelServingKind.Kind:
+			if asp_binding.Spec.HomogeneousTarget.Target.TargetRef.Name == "" {
+				allErrs = append(allErrs, field.Invalid(field.NewPath("spec").Child("homogeneousTarget").Child("targetRef").Child("name"), asp_binding.Spec.HomogeneousTarget.Target.TargetRef.Name, "homogeneousTarget.targetRef.name must be set, but got empty"))
+			}
+			if asp_binding.Spec.HomogeneousTarget.Target.SubTarget != nil {
+				subTarget := asp_binding.Spec.HomogeneousTarget.Target.SubTarget
+				if subTarget.Name == "" {
+					allErrs = append(allErrs, field.Invalid(field.NewPath("spec").Child("homogeneousTarget").Child("targetRef").Child("subTarget").Child("name"), subTarget.Name, "homogeneousTarget.targetRef.subTarget.name must be set, but got empty"))
+				}
+				if subTarget.Kind != "" && subTarget.Kind != ModelServingRoleKind {
+					allErrs = append(allErrs, field.Invalid(field.NewPath("spec").Child("homogeneousTarget").Child("targetRef").Child("subTarget").Child("kind"), subTarget.Kind, fmt.Sprintf("homogeneousTarget.targetRef.subTarget.kind must be `Role`, but got %s", subTarget.Kind)))
+				}
+			}
+		default:
+			allErrs = append(allErrs, field.Invalid(field.NewPath("spec").Child("homogeneousTarget").Child("targetRef").Child("kind"), asp_binding.Spec.HomogeneousTarget.Target.TargetRef.Kind, fmt.Sprintf("homogeneousTarget.targetRef.kind must be ModelServing, but got %s", asp_binding.Spec.HomogeneousTarget.Target.TargetRef.Kind)))
+		}
+	}
+
 	return allErrs
 }

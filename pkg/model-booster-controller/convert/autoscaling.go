@@ -45,14 +45,18 @@ func BuildAutoscalingPolicy(autoscalingConfig *workload.AutoscalingPolicySpec, m
 
 func BuildScalingPolicyBindingSpec(backend *workload.ModelBackend, name string) *workload.AutoscalingPolicyBindingSpec {
 	return &workload.AutoscalingPolicyBindingSpec{
-		ScalingConfiguration: &workload.ScalingConfiguration{
+		HomogeneousTarget: &workload.HomogeneousTarget{
 			Target: workload.Target{
 				TargetRef: corev1.ObjectReference{
 					Name: name,
 					Kind: workload.ModelServingKind.Kind,
 				},
-				AdditionalMatchLabels: map[string]string{
-					workload.RoleLabelKey: workload.ModelServingEntryPodLeaderLabel,
+				MetricEndpoint: workload.MetricEndpoint{
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							workload.RoleLabelKey: workload.ModelServingEntryPodLeaderLabel,
+						},
+					},
 				},
 			},
 			MinReplicas: backend.MinReplicas,
@@ -94,14 +98,18 @@ func BuildOptimizePolicyBindingSpec(model *workload.ModelBooster, name string) *
 	}
 	backend := model.Spec.Backend
 	targetName := utils.GetBackendResourceName(model.Name, backend.Name)
-	params := []workload.OptimizerParam{{
+	params := []workload.HeterogeneousTargetParam{{
 		Target: workload.Target{
 			TargetRef: corev1.ObjectReference{
 				Name: targetName,
 				Kind: workload.ModelServingKind.Kind,
 			},
-			AdditionalMatchLabels: map[string]string{
-				workload.RoleLabelKey: workload.ModelServingEntryPodLeaderLabel,
+			MetricEndpoint: workload.MetricEndpoint{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						workload.RoleLabelKey: workload.ModelServingEntryPodLeaderLabel,
+					},
+				},
 			},
 		},
 		MinReplicas: backend.MinReplicas,
@@ -109,7 +117,7 @@ func BuildOptimizePolicyBindingSpec(model *workload.ModelBooster, name string) *
 		Cost:        backend.ScalingCost,
 	}}
 	return &workload.AutoscalingPolicyBindingSpec{
-		OptimizerConfiguration: &workload.OptimizerConfiguration{
+		HeterogeneousTarget: &workload.HeterogeneousTarget{
 			Params:                   params,
 			CostExpansionRatePercent: *model.Spec.CostExpansionRatePercent,
 		},

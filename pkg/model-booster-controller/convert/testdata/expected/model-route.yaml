@@ -16,7 +16,7 @@ metadata:
       uid: randomUID
 spec:
   modelName: "test-model"
-  
+
   rules:
     - name: "default"
       targetModels:
