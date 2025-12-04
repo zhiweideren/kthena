@@ -16,5 +16,6 @@ limitations under the License.
 
 // +k8s:openai-gen=true
 // +kubebuilder:object:generate=true
+// +k8s:deepcopy-gen=package
 // +groupName=workload.serving.volcano.sh
 package v1alpha1

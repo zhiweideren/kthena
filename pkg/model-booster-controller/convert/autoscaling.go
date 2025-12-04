@@ -86,7 +86,7 @@ func BuildScalingPolicyBinding(model *workload.ModelBooster, backend *workload.M
 			APIVersion: workload.AutoscalingPolicyBindingKind.GroupVersion().String(),
 			Kind:       workload.AutoscalingPolicyBindingKind.Kind,
 		},
-		ObjectMeta: *BuildPolicyBindingMeta(spec, model, "", name),
+		ObjectMeta: *BuildPolicyBindingMeta(spec, model, backend.Name, name),
 		Spec:       *spec,
 	}
 }
