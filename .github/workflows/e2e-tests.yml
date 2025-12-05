@@ -26,12 +26,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
-      - name: Free Disk Space
+      - name: Free Disk Space   # GitHub CI limit storage to 14GB, need to clean up some preinstalled tools
         run: |
           echo "Before cleanup:"
           df -h
