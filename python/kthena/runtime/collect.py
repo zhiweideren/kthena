@@ -74,5 +74,5 @@ async def process_metrics(origin_metric_text: str, standard: MetricStandard) -> 
     except (ValueError, RuntimeError):
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in process_metrics: {e}")
-        raise RuntimeError(f"Failed to process metrics: {e}")
+        logger.error("Unexpected error in process_metrics: %s",e)
+        raise RuntimeError(f"Failed to process metrics: {e}")from e
