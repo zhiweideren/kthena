@@ -46,6 +46,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'user-guide/model-deployment',
         'user-guide/multi-node-inference',
+        'user-guide/network-topology',
         {
           type: 'doc',
           label: 'Autoscaler',
