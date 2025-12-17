@@ -15,6 +15,7 @@
 from prometheus_client.core import Metric, Sample
 from abc import ABC, abstractmethod
 
+
 class MetricOperator(ABC):
     def __init__(
         self,
