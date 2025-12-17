@@ -13,12 +13,10 @@
 # limitations under the License.
 
 from huggingface_hub import snapshot_download
-
+from kthena.downloader.base import ModelDownloader
 from kthena.downloader.logger import setup_logger
 
 logger = setup_logger()
-
-from kthena.downloader.base import ModelDownloader
 
 
 class HuggingFaceDownloader(ModelDownloader):
