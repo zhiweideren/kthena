@@ -17,32 +17,9 @@ Kthena Router now supports both Gateway API and Gateway API Inference Extension,
 
 <!-- truncate -->
 
-## What is Gateway API?
+## What is Gateway API and Gateway API Inference Extension?
 
-Gateway API is a Kubernetes project that provides a standardized, role-oriented API for managing service networking. Unlike the traditional Ingress API, Gateway API separates concerns into distinct roles:
-
-- **Infrastructure Provider**: Manages GatewayClass resources and provides the underlying gateway implementation
-- **Cluster Operator**: Creates and manages Gateway resources that define listening ports and protocols
-- **Application Developer**: Creates HTTPRoute, TCPRoute, and other route resources to define traffic routing rules
-
-This role-based model enables better multi-tenancy, clearer ownership boundaries, and more sophisticated routing capabilities. Gateway API supports advanced features such as:
-
-- **Cross-namespace routing**: Routes can reference backends in different namespaces
-- **Header and path-based matching**: Fine-grained request matching capabilities
-- **Multiple protocol support**: HTTP, HTTPS, TCP, UDP, and TLS
-- **Traffic splitting**: Weighted routing across multiple backends
-- **Extensibility**: Custom extensions for domain-specific use cases
-
-## What is Gateway API Inference Extension?
-
-Gateway API Inference Extension builds upon Gateway API to provide inference-specific capabilities for AI/ML workloads. It introduces specialized resources:
-
-- **InferencePool**: Manages collections of model server endpoints with automatic discovery and health monitoring
-- **InferenceObjective**: Defines priority and capacity policies for inference requests
-- **Model-aware routing**: Advanced routing based on model names, adapters, and request characteristics
-- **OpenAI API compatibility**: Full support for OpenAI-compatible endpoints (`/v1/chat/completions`, `/v1/completions`)
-
-The extension enables seamless integration with popular gateway implementations including Kthena Router (native support), Envoy Gateway, Istio, and Kgateway, providing a standardized way to expose and route inference services across different infrastructure providers.
+Gateway API is a Kubernetes project that provides a standardized, role-oriented API for managing service networking. It separates concerns into distinct roles (Infrastructure Provider, Cluster Operator, and Application Developer) and supports advanced routing capabilities including cross-namespace routing, multiple protocols, and traffic splitting. Gateway API Inference Extension builds upon Gateway API to provide inference-specific capabilities for AI/ML workloads. It introduces specialized resources like InferencePool and InferenceObjective, enabling model-aware routing and OpenAI API compatibility for standardized inference service exposure and routing.
 
 ## Why Support Gateway API and Inference Extension?
 
@@ -330,7 +307,7 @@ After deployment, identify the labels of your model pods:
 
 ```bash
 # Get the model pods and their labels
-kubectl get pods -n <your-namespace> -l workload.serving.volcano.sh/managed-by=workload.serving.volcano.sh --show-labels
+kubectl get pods -l workload.serving.volcano.sh/managed-by=workload.serving.volcano.sh --show-labels
 
 # Example output shows labels like:
 # modelserving.volcano.sh/name=demo-backend1
@@ -417,7 +394,6 @@ spec:
   - group: gateway.networking.k8s.io
     kind: Gateway
     name: inference-gateway
-    namespace: kthena-system
   rules:
   - backendRefs:
     - group: inference.networking.k8s.io
@@ -495,25 +471,6 @@ Native ModelRoute supports sophisticated weighted routing across multiple ModelS
 - **Traffic splitting**: Distribute traffic across backends based on weights
 - **A/B testing**: Gradually shift traffic between different model versions
 - **Capacity-based routing**: Route based on backend capacity and availability
-
-### Advanced Scheduling Algorithms
-
-Native ModelRoute/ModelServer integrates with Kthena Router's sophisticated scheduling plugins:
-
-- **Prefix Cache Aware Scheduling**: Routes requests with similar prefixes to pods with cached KV states
-- **KV Cache Aware Scheduling**: Routes to pods with available cache capacity
-- **LoRA Affinity Scheduling**: Routes LoRA requests to pods that already have the adapter loaded
-- **Least Latency Scheduling**: Routes to the fastest available pods based on real-time metrics
-- **Fairness Scheduling**: Ensures equitable resource allocation across users
-
-### Model-Aware Metrics
-
-Native ModelRoute/ModelServer leverages real-time metrics from inference engines (vLLM, SGLang, TGI) to make intelligent routing decisions, including:
-
-- KV cache utilization
-- Current LoRA adapter status
-- Request queue lengths
-- Latency metrics (TTFT, TPOT)
 
 These advanced features make native ModelRoute/ModelServer ideal for production environments that require sophisticated traffic management and optimization strategies. However, Gateway API and Gateway API Inference Extension provide better interoperability and compatibility with other gateway implementations, making them suitable for multi-gateway deployments and standardized infrastructure.
 
