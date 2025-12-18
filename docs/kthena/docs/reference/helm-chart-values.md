@@ -11,7 +11,7 @@ The Kthena Helm chart consists of two main subcharts: `workload` and `networking
 Global values apply across all subcharts and control cluster‑wide settings.
 
 | Parameter                   | Type     | Default  | Description                                                                                                                                |
-| --------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+|-----------------------------|----------|----------|--------------------------------------------------------------------------------------------------------------------------------------------|
 | `global.certManagementMode` | `string` | `"auto"` | Certificate management mode. Valid values: `auto` (self‑signed), `cert‑manager` (use cert‑manager), `manual` (provide your own CA bundle). |
 | `global.webhook.caBundle`   | `string` | `""`     | Base64‑encoded CA bundle for webhook server certificates. Required only when `certManagementMode` is `"manual"`.                           |
 
@@ -22,7 +22,7 @@ The workload subchart deploys the Kthena Controller Manager, which manages Model
 ### Controller Manager
 
 | Parameter                                               | Type      | Default                                          | Description                                              |
-| ------------------------------------------------------- | --------- | ------------------------------------------------ | -------------------------------------------------------- |
+|---------------------------------------------------------|-----------|--------------------------------------------------|----------------------------------------------------------| 
 | `workload.enabled`                                      | `boolean` | `true`                                           | Enable or disable the workload subchart.                 |
 | `workload.controllerManager.image.repository`           | `string`  | `"ghcr.io/volcano-sh/kthena-controller-manager"` | Container image repository.                              |
 | `workload.controllerManager.image.tag`                  | `string`  | `"latest"`                                       | Container image tag (usually set by CI).                 |
@@ -49,43 +49,41 @@ The networking subchart deploys the Kthena Router and its associated webhook, wh
 
 ### Kthena Router
 
-| Parameter                                               | Type      | Default                              | Description                                                                                   |
-| ------------------------------------------------------- | --------- | ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `networking.enabled`                                    | `boolean` | `true`                               | Enable or disable the networking subchart.                                                    |
-| `networking.kthenaRouter.enabled`                       | `boolean` | `true`                               | Enable the Kthena Router component.                                                           |
-| `networking.kthenaRouter.replicas`                      | `integer` | `1`                                  | Number of router replicas.                                                                    |
-| `networking.kthenaRouter.port`                          | `integer` | `8080`                               | HTTP port the router listens on.                                                              |
-| `networking.kthenaRouter.image.repository`              | `string`  | `"ghcr.io/volcano-sh/kthena-router"` | Router container image repository.                                                            |
-| `networking.kthenaRouter.image.tag`                     | `string`  | `"latest"`                           | Router image tag (usually set by CI).                                                         |
-| `networking.kthenaRouter.image.pullPolicy`              | `string`  | `"IfNotPresent"`                     | Image pull policy.                                                                            |
-| `networking.kthenaRouter.resource.limits.cpu`           | `string`  | `"500m"`                             | CPU limit.                                                                                    |
-| `networking.kthenaRouter.resource.limits.memory`        | `string`  | `"512Mi"`                            | Memory limit.                                                                                 |
-| `networking.kthenaRouter.resource.requests.cpu`         | `string`  | `"100m"`                             | CPU request.                                                                                  |
-| `networking.kthenaRouter.resource.requests.memory`      | `string`  | `"128Mi"`                            | Memory request.                                                                               |
-| `networking.kthenaRouter.tls.enabled`                   | `boolean` | `false`                              | Enable TLS for the router.                                                                    |
-| `networking.kthenaRouter.tls.dnsName`                   | `string`  | `""`                                 | DNS name for the TLS certificate (required if TLS enabled).                                   |
-| `networking.kthenaRouter.tls.secretName`                | `string`  | `"kthena-router-tls"`                | Name of the secret storing the TLS certificate and key.                                       |
-| `networking.kthenaRouter.webhook.enabled`               | `boolean` | `true`                               | Enable the router webhook.                                                                    |
-| `networking.kthenaRouter.webhook.port`                  | `integer` | `8443`                               | Port the webhook listens on.                                                                  |
-| `networking.kthenaRouter.webhook.servicePort`           | `integer` | `443`                                | Service port for the webhook.                                                                 |
-| `networking.kthenaRouter.webhook.tls.certFile`          | `string`  | `"/etc/tls/tls.crt"`                 | Path to the TLS certificate file inside the pod.                                              |
-| `networking.kthenaRouter.webhook.tls.keyFile`           | `string`  | `"/etc/tls/tls.key"`                 | Path to the TLS key file inside the pod.                                                      |
-| `networking.kthenaRouter.webhook.tls.secretName`        | `string`  | `"kthena-router-webhook-certs"`      | Name of the secret storing webhook certificates.                                              |
-| `networking.kthenaRouter.webhook.tls.serviceName`       | `string`  | `"kthena-router-webhook"`            | Service name used for certificate DNS names.                                                  |
-| `networking.kthenaRouter.fairness.enabled`              | `boolean` | `false`                              | Enable fairness scheduling for request prioritization.                                        |
-| `networking.kthenaRouter.fairness.windowSize`           | `string`  | `"1h"`                               | Sliding window duration for token usage tracking (e.g., `1m`, `5m`, `1h`).                    |
-| `networking.kthenaRouter.fairness.inputTokenWeight`     | `float`   | `1.0`                                | Weight multiplier for input tokens in priority calculation.                                   |
-| `networking.kthenaRouter.fairness.outputTokenWeight`    | `float`   | `2.0`                                | Weight multiplier for output tokens in priority calculation.                                  |
-| `networking.kthenaRouter.accessLog.enabled`             | `boolean` | `true`                               | Enable access logging.                                                                        |
-| `networking.kthenaRouter.accessLog.format`              | `string`  | `"text"`                             | Log format: `"json"` or `"text"`.                                                             |
-| `networking.kthenaRouter.accessLog.output`              | `string`  | `"stdout"`                           | Where to write logs: `"stdout"`, `"stderr"`, or a file path.                                  |
-| `networking.kthenaRouter.gatewayAPI.enabled`            | `boolean` | `false`                              | Enable Gateway API related features.                                                          |
-| `networking.kthenaRouter.gatewayAPI.inferenceExtension` | `boolean` | `false`                              | Enable Gateway API Inference Extension features (requires `gatewayAPI.enabled` to be `true`). |
+| Parameter                                            | Type      | Default                              | Description                                                                |
+|------------------------------------------------------|-----------|--------------------------------------|----------------------------------------------------------------------------|
+| `networking.enabled`                                 | `boolean` | `true`                               | Enable or disable the networking subchart.                                 |
+| `networking.kthenaRouter.enabled`                    | `boolean` | `true`                               | Enable the Kthena Router component.                                        |
+| `networking.kthenaRouter.replicas`                   | `integer` | `1`                                  | Number of router replicas.                                                 |
+| `networking.kthenaRouter.port`                       | `integer` | `8080`                               | HTTP port the router listens on.                                           |
+| `networking.kthenaRouter.image.repository`           | `string`  | `"ghcr.io/volcano-sh/kthena-router"` | Router container image repository.                                         |
+| `networking.kthenaRouter.image.tag`                  | `string`  | `"latest"`                           | Router image tag (usually set by CI).                                      |
+| `networking.kthenaRouter.image.pullPolicy`           | `string`  | `"IfNotPresent"`                     | Image pull policy.                                                         |
+| `networking.kthenaRouter.resource.limits.cpu`        | `string`  | `"500m"`                             | CPU limit.                                                                 |
+| `networking.kthenaRouter.resource.limits.memory`     | `string`  | `"512Mi"`                            | Memory limit.                                                              |
+| `networking.kthenaRouter.resource.requests.cpu`      | `string`  | `"100m"`                             | CPU request.                                                               |
+| `networking.kthenaRouter.resource.requests.memory`   | `string`  | `"128Mi"`                            | Memory request.                                                            |
+| `networking.kthenaRouter.tls.enabled`                | `boolean` | `false`                              | Enable TLS for the router.                                                 |
+| `networking.kthenaRouter.tls.dnsName`                | `string`  | `""`                                 | DNS name for the TLS certificate (required if TLS enabled).                |
+| `networking.kthenaRouter.tls.secretName`             | `string`  | `"kthena-router-tls"`                | Name of the secret storing the TLS certificate and key.                    |
+| `networking.kthenaRouter.webhook.enabled`            | `boolean` | `true`                               | Enable the router webhook.                                                 |
+| `networking.kthenaRouter.webhook.port`               | `integer` | `8443`                               | Port the webhook listens on.                                               |
+| `networking.kthenaRouter.webhook.servicePort`        | `integer` | `443`                                | Service port for the webhook.                                              |
+| `networking.kthenaRouter.webhook.tls.certFile`       | `string`  | `"/etc/tls/tls.crt"`                 | Path to the TLS certificate file inside the pod.                           |
+| `networking.kthenaRouter.webhook.tls.keyFile`        | `string`  | `"/etc/tls/tls.key"`                 | Path to the TLS key file inside the pod.                                   |
+| `networking.kthenaRouter.webhook.tls.secretName`     | `string`  | `"kthena-router-webhook-certs"`      | Name of the secret storing webhook certificates.                           |
+| `networking.kthenaRouter.webhook.tls.serviceName`    | `string`  | `"kthena-router-webhook"`            | Service name used for certificate DNS names.                               |
+| `networking.kthenaRouter.fairness.enabled`           | `boolean` | `false`                              | Enable fairness scheduling for request prioritization.                     |
+| `networking.kthenaRouter.fairness.windowSize`        | `string`  | `"1h"`                               | Sliding window duration for token usage tracking (e.g., `1m`, `5m`, `1h`). |
+| `networking.kthenaRouter.fairness.inputTokenWeight`  | `float`   | `1.0`                                | Weight multiplier for input tokens in priority calculation.                |
+| `networking.kthenaRouter.fairness.outputTokenWeight` | `float`   | `2.0`                                | Weight multiplier for output tokens in priority calculation.               |
+| `networking.kthenaRouter.accessLog.enabled`          | `boolean` | `true`                               | Enable access logging.                                                     |
+| `networking.kthenaRouter.accessLog.format`           | `string`  | `"text"`                             | Log format: `"json"` or `"text"`.                                          |
+| `networking.kthenaRouter.accessLog.output`           | `string`  | `"stdout"`                           | Where to write logs: `"stdout"`, `"stderr"`, or a file path.               |
 
 ### Router Webhook
 
 | Parameter                                     | Type      | Default                                      | Description                                   |
-| --------------------------------------------- | --------- | -------------------------------------------- | --------------------------------------------- |
+|-----------------------------------------------|-----------|----------------------------------------------|-----------------------------------------------|
 | `networking.webhook.enabled`                  | `boolean` | `true`                                       | Enable the router webhook component.          |
 | `networking.webhook.replicas`                 | `integer` | `1`                                          | Number of webhook replicas.                   |
 | `networking.webhook.image.repository`         | `string`  | `"ghcr.io/volcano-sh/kthena-router-webhook"` | Webhook container image repository.           |
