@@ -22,10 +22,22 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"os/exec"
+	"strings"
+
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/yaml"
 )
+
+// ApplyYAML applies a YAML string using kubectl apply
+func ApplyYAML(yamlStr string) error {
+	cmd := exec.Command("kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(yamlStr)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
 
 // GetKubeConfig returns a Kubernetes REST config.
 // It tries in-cluster config first, then falls back to kubeconfig file.

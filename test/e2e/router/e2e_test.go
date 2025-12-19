@@ -21,18 +21,13 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	clientset "github.com/volcano-sh/kthena/client-go/clientset/versioned"
 	networkingv1alpha1 "github.com/volcano-sh/kthena/pkg/apis/networking/v1alpha1"
+	"github.com/volcano-sh/kthena/test/e2e/framework"
 	"github.com/volcano-sh/kthena/test/e2e/utils"
-	appsv1 "k8s.io/api/apps/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -40,138 +35,32 @@ const (
 )
 
 var (
-	kubeClient   *kubernetes.Clientset
-	kthenaClient *clientset.Clientset
+	testCtx *utils.RouterTestContext
 )
-
-const (
-	deployment1_5bName  = "deepseek-r1-1-5b"
-	deployment7bName    = "deepseek-r1-7b"
-	modelServer1_5bName = "deepseek-r1-1-5b"
-	modelServer7bName   = "deepseek-r1-7b"
-)
-
-// setupCommonComponents deploys common components that will be used by all test cases.
-// This includes the LLM mock deployments and ModelServers.
-func setupCommonComponents() error {
-	ctx := context.Background()
-
-	// Initialize Kubernetes clients
-	config, err := utils.GetKubeConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get kubeconfig: %w", err)
-	}
-	kubeClient, err = kubernetes.NewForConfig(config)
-	if err != nil {
-		return fmt.Errorf("failed to create Kubernetes client: %w", err)
-	}
-	kthenaClient, err = clientset.NewForConfig(config)
-	if err != nil {
-		return fmt.Errorf("failed to create kthena client: %w", err)
-	}
-
-	// Deploy LLM Mock DS1.5B Deployment
-	fmt.Println("Deploying LLM Mock DS1.5B Deployment...")
-	deployment1_5b := utils.LoadYAMLFromFile[appsv1.Deployment]("../../../examples/kthena-router/LLM-Mock-ds1.5b.yaml")
-	_, err = kubeClient.AppsV1().Deployments(testNamespace).Create(ctx, deployment1_5b, metav1.CreateOptions{})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create DS1.5B Deployment: %w", err)
-	}
-	if apierrors.IsAlreadyExists(err) {
-		fmt.Println("DS1.5B Deployment already exists, skipping creation")
-	}
-
-	// Deploy LLM Mock DS7B Deployment
-	fmt.Println("Deploying LLM Mock DS7B Deployment...")
-	deployment7b := utils.LoadYAMLFromFile[appsv1.Deployment]("../../../examples/kthena-router/LLM-Mock-ds7b.yaml")
-	_, err = kubeClient.AppsV1().Deployments(testNamespace).Create(ctx, deployment7b, metav1.CreateOptions{})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create DS7B Deployment: %w", err)
-	}
-	if apierrors.IsAlreadyExists(err) {
-		fmt.Println("DS7B Deployment already exists, skipping creation")
-	}
-
-	// Wait for deployments to be ready
-	fmt.Println("Waiting for deployments to be ready...")
-	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	err = wait.PollUntilContextTimeout(timeoutCtx, 5*time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
-		deploy1_5b, err := kubeClient.AppsV1().Deployments(testNamespace).Get(ctx, deployment1_5bName, metav1.GetOptions{})
-		if err != nil {
-			return false, nil
-		}
-		deploy7b, err := kubeClient.AppsV1().Deployments(testNamespace).Get(ctx, deployment7bName, metav1.GetOptions{})
-		if err != nil {
-			return false, nil
-		}
-		return deploy1_5b.Status.ReadyReplicas == *deploy1_5b.Spec.Replicas &&
-			deploy7b.Status.ReadyReplicas == *deploy7b.Spec.Replicas, nil
-	})
-	if err != nil {
-		return fmt.Errorf("deployments did not become ready: %w", err)
-	}
-
-	// Deploy ModelServer DS1.5B
-	fmt.Println("Deploying ModelServer DS1.5B...")
-	modelServer1_5b := utils.LoadYAMLFromFile[networkingv1alpha1.ModelServer]("../../../examples/kthena-router/ModelServer-ds1.5b.yaml")
-	_, err = kthenaClient.NetworkingV1alpha1().ModelServers(testNamespace).Create(ctx, modelServer1_5b, metav1.CreateOptions{})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create ModelServer DS1.5B: %w", err)
-	}
-	if apierrors.IsAlreadyExists(err) {
-		fmt.Println("ModelServer DS1.5B already exists, skipping creation")
-	}
-
-	// Deploy ModelServer DS7B
-	fmt.Println("Deploying ModelServer DS7B...")
-	modelServer7b := utils.LoadYAMLFromFile[networkingv1alpha1.ModelServer]("../../../examples/kthena-router/ModelServer-ds7b.yaml")
-	_, err = kthenaClient.NetworkingV1alpha1().ModelServers(testNamespace).Create(ctx, modelServer7b, metav1.CreateOptions{})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create ModelServer DS7B: %w", err)
-	}
-	if apierrors.IsAlreadyExists(err) {
-		fmt.Println("ModelServer DS7B already exists, skipping creation")
-	}
-
-	fmt.Println("Common components deployed successfully")
-	return nil
-}
-
-// cleanupCommonComponents cleans up common components deployed for tests.
-func cleanupCommonComponents() error {
-	if kubeClient == nil || kthenaClient == nil {
-		return nil
-	}
-
-	ctx := context.Background()
-	fmt.Println("Cleaning up common components...")
-
-	// Delete ModelServers
-	if err := kthenaClient.NetworkingV1alpha1().ModelServers(testNamespace).Delete(ctx, modelServer1_5bName, metav1.DeleteOptions{}); err != nil {
-		fmt.Printf("Warning: Failed to delete ModelServer %s: %v\n", modelServer1_5bName, err)
-	}
-	if err := kthenaClient.NetworkingV1alpha1().ModelServers(testNamespace).Delete(ctx, modelServer7bName, metav1.DeleteOptions{}); err != nil {
-		fmt.Printf("Warning: Failed to delete ModelServer %s: %v\n", modelServer7bName, err)
-	}
-
-	// Delete Deployments
-	if err := kubeClient.AppsV1().Deployments(testNamespace).Delete(ctx, deployment1_5bName, metav1.DeleteOptions{}); err != nil {
-		fmt.Printf("Warning: Failed to delete Deployment %s: %v\n", deployment1_5bName, err)
-	}
-	if err := kubeClient.AppsV1().Deployments(testNamespace).Delete(ctx, deployment7bName, metav1.DeleteOptions{}); err != nil {
-		fmt.Printf("Warning: Failed to delete Deployment %s: %v\n", deployment7bName, err)
-	}
-
-	fmt.Println("Common components cleanup completed")
-	return nil
-}
 
 // TestMain runs setup and cleanup for all tests in this package.
 func TestMain(m *testing.M) {
+	config := framework.NewDefaultConfig()
+	// Router tests need networking enabled
+	config.NetworkingEnabled = true
+
+	if err := framework.InstallKthena(config); err != nil {
+		fmt.Printf("Failed to install kthena: %v\n", err)
+		os.Exit(1)
+	}
+
+	var err error
+	testCtx, err = utils.NewRouterTestContext(testNamespace)
+	if err != nil {
+		fmt.Printf("Failed to create router test context: %v\n", err)
+		_ = framework.UninstallKthena(config.Namespace)
+		os.Exit(1)
+	}
+
 	// Setup common components
-	if err := setupCommonComponents(); err != nil {
+	if err := testCtx.SetupCommonComponents(); err != nil {
 		fmt.Printf("Failed to setup common components: %v\n", err)
+		_ = framework.UninstallKthena(config.Namespace)
 		os.Exit(1)
 	}
 
@@ -179,8 +68,12 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	// Cleanup common components
-	if err := cleanupCommonComponents(); err != nil {
+	if err := testCtx.CleanupCommonComponents(); err != nil {
 		fmt.Printf("Failed to cleanup common components: %v\n", err)
+	}
+
+	if err := framework.UninstallKthena(config.Namespace); err != nil {
+		fmt.Printf("Failed to uninstall kthena: %v\n", err)
 	}
 
 	os.Exit(code)
@@ -193,7 +86,7 @@ func TestModelRouteSimple(t *testing.T) {
 	// Deploy ModelRoute
 	t.Log("Deploying ModelRoute...")
 	modelRoute := utils.LoadYAMLFromFile[networkingv1alpha1.ModelRoute]("../../../examples/kthena-router/ModelRouteSimple.yaml")
-	createdModelRoute, err := kthenaClient.NetworkingV1alpha1().ModelRoutes(testNamespace).Create(ctx, modelRoute, metav1.CreateOptions{})
+	createdModelRoute, err := testCtx.KthenaClient.NetworkingV1alpha1().ModelRoutes(testNamespace).Create(ctx, modelRoute, metav1.CreateOptions{})
 	require.NoError(t, err, "Failed to create ModelRoute")
 	assert.NotNil(t, createdModelRoute)
 	t.Logf("Created ModelRoute: %s/%s", createdModelRoute.Namespace, createdModelRoute.Name)
@@ -202,7 +95,7 @@ func TestModelRouteSimple(t *testing.T) {
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
 		t.Logf("Cleaning up ModelRoute: %s/%s", createdModelRoute.Namespace, createdModelRoute.Name)
-		if err := kthenaClient.NetworkingV1alpha1().ModelRoutes(testNamespace).Delete(cleanupCtx, createdModelRoute.Name, metav1.DeleteOptions{}); err != nil {
+		if err := testCtx.KthenaClient.NetworkingV1alpha1().ModelRoutes(testNamespace).Delete(cleanupCtx, createdModelRoute.Name, metav1.DeleteOptions{}); err != nil {
 			t.Logf("Warning: Failed to delete ModelRoute %s/%s: %v", createdModelRoute.Namespace, createdModelRoute.Name, err)
 		}
 	})

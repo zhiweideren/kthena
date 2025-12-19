@@ -6,7 +6,7 @@ metadata:
 spec:
   modelName: "deepseek-binding-gateway"
   parentRefs:
-  - name: "kthena-gateway"
+  - name: "default"
     namespace: "kthena-system"
     kind: "Gateway"
   rules:

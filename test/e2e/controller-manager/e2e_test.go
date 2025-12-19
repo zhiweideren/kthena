@@ -21,10 +21,14 @@ import (
 	"testing"
 	"time"
 
+	"fmt"
+	"os"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	clientset "github.com/volcano-sh/kthena/client-go/clientset/versioned"
 	workload "github.com/volcano-sh/kthena/pkg/apis/workload/v1alpha1"
+	"github.com/volcano-sh/kthena/test/e2e/framework"
 	"github.com/volcano-sh/kthena/test/e2e/utils"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -37,6 +41,26 @@ const (
 	// TODO: separate kthena system components and e2e test namespace
 	testNamespace = "dev"
 )
+
+func TestMain(m *testing.M) {
+	config := framework.NewDefaultConfig()
+	// Controller manager tests need workload enabled
+	config.WorkloadEnabled = true
+
+	if err := framework.InstallKthena(config); err != nil {
+		fmt.Printf("Failed to install kthena: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Run tests
+	code := m.Run()
+
+	if err := framework.UninstallKthena(config.Namespace); err != nil {
+		fmt.Printf("Failed to uninstall kthena: %v\n", err)
+	}
+
+	os.Exit(code)
+}
 
 // TestModelCR creates a ModelBooster CR, waits for it to become active, and tests chat functionality.
 func TestModelCR(t *testing.T) {

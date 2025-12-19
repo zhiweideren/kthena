@@ -54,35 +54,14 @@ go install github.com/cert-manager/cmctl/v2@latest && $(go env GOPATH)/bin/cmctl
 # Install Volcano
 echo "Start to install Volcano"
 kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/master/installer/volcano-development.yaml
-# Install by helm
-helm install kthena ./charts/kthena --namespace dev --create-namespace \
-  --set networking.kthenaRouter.image.tag=${TAG} \
-  --set networking.webhook.image.tag=${TAG} \
-  --set workload.controllerManager.image.tag=${TAG} \
-  --set workload.controllerManager.downloaderImage.tag=${TAG} \
-  --set workload.controllerManager.runtimeImage.tag=${TAG}
 
-# Wait for pods to be ready
-echo "Waiting for pods to be ready..."
-kubectl wait --for=condition=Ready pod --all -n=dev --timeout=300s
-
-# Setup port-forward to router service
-echo "Setting up port-forward to router service..."
-# Use 127.0.0.1 explicitly to avoid IPv6 issues in CI environments
-kubectl port-forward -n dev --address 127.0.0.1 svc/kthena-router 8080:80 > /tmp/port-forward.log 2>&1 &
-PORT_FORWARD_PID=$!
-echo $PORT_FORWARD_PID > /tmp/port-forward.pid
-
-# Wait a bit for port-forward to be ready
-sleep 2
-
-# Verify port-forward is working
-if ! kill -0 $PORT_FORWARD_PID 2>/dev/null; then
-    echo "Warning: Port-forward process may have failed. Check /tmp/port-forward.log"
-fi
+# Install Gateway API CRDs
+echo "Start to install Gateway API CRDs"
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
+# Install Gateway API Inference Extension CRDs
+echo "Start to install Gateway API Inference Extension CRDs"
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.2.0/manifests.yaml
 
 echo "E2E setup completed successfully"
 echo "Cluster: ${CLUSTER_NAME}"
 echo "KUBECONFIG: /tmp/kubeconfig-e2e"
-echo "Router service is available at 127.0.0.1:8080"
-echo "Port-forward PID: ${PORT_FORWARD_PID} (saved to /tmp/port-forward.pid)"
