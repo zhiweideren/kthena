@@ -102,7 +102,7 @@ func (c *RouterTestContext) SetupCommonComponents() error {
 
 	// Deploy LLM Mock DS1.5B Deployment
 	fmt.Println("Deploying LLM Mock DS1.5B Deployment...")
-	deployment1_5b := utils.LoadYAMLFromFile[appsv1.Deployment]("../../../examples/kthena-router/LLM-Mock-ds1.5b.yaml")
+	deployment1_5b := utils.LoadYAMLFromFile[appsv1.Deployment]("examples/kthena-router/LLM-Mock-ds1.5b.yaml")
 	deployment1_5b.Namespace = c.Namespace
 	_, err := c.KubeClient.AppsV1().Deployments(c.Namespace).Create(ctx, deployment1_5b, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
@@ -111,7 +111,7 @@ func (c *RouterTestContext) SetupCommonComponents() error {
 
 	// Deploy LLM Mock DS7B Deployment
 	fmt.Println("Deploying LLM Mock DS7B Deployment...")
-	deployment7b := utils.LoadYAMLFromFile[appsv1.Deployment]("../../../examples/kthena-router/LLM-Mock-ds7b.yaml")
+	deployment7b := utils.LoadYAMLFromFile[appsv1.Deployment]("examples/kthena-router/LLM-Mock-ds7b.yaml")
 	deployment7b.Namespace = c.Namespace
 	_, err = c.KubeClient.AppsV1().Deployments(c.Namespace).Create(ctx, deployment7b, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
@@ -140,7 +140,7 @@ func (c *RouterTestContext) SetupCommonComponents() error {
 
 	// Deploy ModelServer DS1.5B
 	fmt.Println("Deploying ModelServer DS1.5B...")
-	modelServer1_5b := utils.LoadYAMLFromFile[networkingv1alpha1.ModelServer]("../../../examples/kthena-router/ModelServer-ds1.5b.yaml")
+	modelServer1_5b := utils.LoadYAMLFromFile[networkingv1alpha1.ModelServer]("examples/kthena-router/ModelServer-ds1.5b.yaml")
 	modelServer1_5b.Namespace = c.Namespace
 	_, err = c.KthenaClient.NetworkingV1alpha1().ModelServers(c.Namespace).Create(ctx, modelServer1_5b, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
@@ -149,7 +149,7 @@ func (c *RouterTestContext) SetupCommonComponents() error {
 
 	// Deploy ModelServer DS7B
 	fmt.Println("Deploying ModelServer DS7B...")
-	modelServer7b := utils.LoadYAMLFromFile[networkingv1alpha1.ModelServer]("../../../examples/kthena-router/ModelServer-ds7b.yaml")
+	modelServer7b := utils.LoadYAMLFromFile[networkingv1alpha1.ModelServer]("examples/kthena-router/ModelServer-ds7b.yaml")
 	modelServer7b.Namespace = c.Namespace
 	_, err = c.KthenaClient.NetworkingV1alpha1().ModelServers(c.Namespace).Create(ctx, modelServer7b, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
