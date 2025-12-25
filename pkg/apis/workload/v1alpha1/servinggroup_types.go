@@ -90,6 +90,11 @@ type Role struct {
 	// WorkerTemplate defines the template for the worker pod of a role.
 	// +optional
 	WorkerTemplate *PodTemplateSpec `json:"workerTemplate,omitempty"`
+
+	// UseLeaderWorkerSet indicates whether to use LeaderWorkerSet to manage the pods for this role.
+	// If true, a LeaderWorkerSet resource will be created instead of individual Pods.
+	// +optional
+	UseLeaderWorkerSet bool `json:"useLeaderWorkerSet,omitempty"`
 }
 
 // PodTemplateSpec describes the data a pod should have when created from a template

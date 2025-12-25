@@ -135,7 +135,7 @@ func createBasePod(role workloadv1alpha1.Role, mi *workloadv1alpha1.ModelServing
 				workloadv1alpha1.RevisionLabelKey:         revision,
 			},
 			OwnerReferences: []metav1.OwnerReference{
-				newModelServingOwnerRef(mi),
+				NewModelServingOwnerRef(mi),
 			},
 		},
 	}
@@ -212,8 +212,8 @@ func addEnvVars(container *corev1.Container, newEnvVars ...corev1.EnvVar) {
 	container.Env = append(retainedEnvVars, newEnvVars...)
 }
 
-// newModelServingOwnerRef creates an OwnerReference pointing to the given ModelServing.
-func newModelServingOwnerRef(mi *workloadv1alpha1.ModelServing) metav1.OwnerReference {
+// NewModelServingOwnerRef creates an OwnerReference pointing to the given ModelServing.
+func NewModelServingOwnerRef(mi *workloadv1alpha1.ModelServing) metav1.OwnerReference {
 	return metav1.OwnerReference{
 		APIVersion:         workloadv1alpha1.ModelServingKind.GroupVersion().String(),
 		Kind:               workloadv1alpha1.ModelServingKind.Kind,
@@ -231,7 +231,7 @@ func CreateHeadlessService(ctx context.Context, k8sClient kubernetes.Interface, 
 			Name:      serviceName,
 			Namespace: mi.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
-				newModelServingOwnerRef(mi),
+				NewModelServingOwnerRef(mi),
 			},
 			Labels: map[string]string{
 				workloadv1alpha1.GroupNameLabelKey: groupName,

@@ -29,10 +29,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	listerv1 "k8s.io/client-go/listers/core/v1"
@@ -58,6 +62,7 @@ const (
 type ModelServingController struct {
 	kubeClientSet      kubernetes.Interface
 	modelServingClient clientset.Interface
+	dynamicClient      dynamic.Interface
 
 	syncHandler           func(ctx context.Context, miKey string) error
 	gangManager           gangscheduling.Manager
@@ -75,7 +80,7 @@ type ModelServingController struct {
 	initialSync bool     // indicates whether the initial sync has been completed
 }
 
-func NewModelServingController(kubeClientSet kubernetes.Interface, modelServingClient clientset.Interface, volcanoClient volcano.Interface) (*ModelServingController, error) {
+func NewModelServingController(kubeClientSet kubernetes.Interface, modelServingClient clientset.Interface, volcanoClient volcano.Interface, dynamicClient dynamic.Interface) (*ModelServingController, error) {
 	selector, err := labels.NewRequirement(workloadv1alpha1.GroupNameLabelKey, selection.Exists, nil)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create label selector, err: %v", err)
@@ -114,6 +119,7 @@ func NewModelServingController(kubeClientSet kubernetes.Interface, modelServingC
 	c := &ModelServingController{
 		kubeClientSet:         kubeClientSet,
 		modelServingClient:    modelServingClient,
+		dynamicClient:         dynamicClient,
 		gangManager:           gangscheduling.NewManager(kubeClientSet, volcanoClient, store),
 		podsLister:            podsInformer.Lister(),
 		podsInformer:          podsInformer.Informer(),
@@ -678,6 +684,15 @@ func (c *ModelServingController) DeleteRole(ctx context.Context, mi *workloadv1a
 		klog.Errorf("failed to set role %s/%s status: %v", groupName, roleID, err)
 		return
 	}
+
+	// Delete LeaderWorkerSet if exists
+	lwsName := groupName + "-" + roleID
+	gvr := schema.GroupVersionResource{Group: "leaderworkerset.x-k8s.io", Version: "v1", Resource: "leaderworkersets"}
+	err = c.dynamicClient.Resource(gvr).Namespace(mi.Namespace).Delete(ctx, lwsName, metav1.DeleteOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		klog.Errorf("failed to delete LWS %s: %v", lwsName, err)
+	}
+
 	// Delete all pods in role
 	err = c.kubeClientSet.CoreV1().Pods(mi.Namespace).DeleteCollection(
 		ctx,
@@ -1150,6 +1165,10 @@ func (c *ModelServingController) CreatePodsForServingGroup(ctx context.Context, 
 func (c *ModelServingController) CreatePodsByRole(ctx context.Context, role workloadv1alpha1.Role, mi *workloadv1alpha1.ModelServing, roleIndex int, servingGroupOrdinal int, revision string) error {
 	servingGroupName := utils.GenerateServingGroupName(mi.Name, servingGroupOrdinal)
 
+	if role.UseLeaderWorkerSet {
+		return c.CreateLeaderWorkerSet(ctx, role, mi, roleIndex, servingGroupOrdinal, revision)
+	}
+
 	entryPod := utils.GenerateEntryPod(role, mi, servingGroupName, roleIndex, revision)
 	taskName := c.gangManager.GenerateTaskName(role.Name, roleIndex)
 	c.gangManager.AnnotatePodWithPodGroup(entryPod, mi, servingGroupName, taskName)
@@ -1181,6 +1200,92 @@ func (c *ModelServingController) CreatePodsByRole(ctx context.Context, role work
 	return nil
 }
 
+func (c *ModelServingController) CreateLeaderWorkerSet(ctx context.Context, role workloadv1alpha1.Role, mi *workloadv1alpha1.ModelServing, roleIndex int, servingGroupOrdinal int, revision string) error {
+	servingGroupName := utils.GenerateServingGroupName(mi.Name, servingGroupOrdinal)
+	roleID := utils.GenerateRoleID(role.Name, roleIndex)
+	lwsName := servingGroupName + "-" + roleID
+
+	// Generate Entry Pod to get Spec and Metadata
+	entryPod := utils.GenerateEntryPod(role, mi, servingGroupName, roleIndex, revision)
+	leaderPodSpec, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&entryPod.Spec)
+	if err != nil {
+		return fmt.Errorf("failed to convert leader pod spec: %v", err)
+	}
+
+	// Generate Worker Pod to get Spec and Metadata
+	workerPod := utils.GenerateWorkerPod(role, mi, entryPod, servingGroupName, roleIndex, 1, revision)
+	workerPodSpec, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&workerPod.Spec)
+	if err != nil {
+		return fmt.Errorf("failed to convert worker pod spec: %v", err)
+	}
+
+	ownerRef := utils.NewModelServingOwnerRef(mi)
+	ownerRefMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&ownerRef)
+	if err != nil {
+		return fmt.Errorf("failed to convert owner ref: %v", err)
+	}
+
+	lws := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "leaderworkerset.x-k8s.io/v1",
+			"kind":       "LeaderWorkerSet",
+			"metadata": map[string]interface{}{
+				"name":      lwsName,
+				"namespace": mi.Namespace,
+				"labels":    entryPod.Labels,
+				"ownerReferences": []interface{}{
+					ownerRefMap,
+				},
+			},
+			"spec": map[string]interface{}{
+				"replicas": 1,
+				"leaderWorkerTemplate": map[string]interface{}{
+					"size": int64(role.WorkerReplicas),
+					"leaderTemplate": map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"labels":      entryPod.Labels,
+							"annotations": entryPod.Annotations,
+						},
+						"spec": leaderPodSpec,
+					},
+					"workerTemplate": map[string]interface{}{
+						"metadata": map[string]interface{}{
+							"labels":      workerPod.Labels,
+							"annotations": workerPod.Annotations,
+						},
+						"spec": workerPodSpec,
+					},
+				},
+			},
+		},
+	}
+
+	gvr := schema.GroupVersionResource{Group: "leaderworkerset.x-k8s.io", Version: "v1", Resource: "leaderworkersets"}
+	_, err = c.dynamicClient.Resource(gvr).Namespace(mi.Namespace).Create(ctx, lws, metav1.CreateOptions{})
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create LeaderWorkerSet %s: %v", lwsName, err)
+	}
+
+	// Create Headless Service if needed.
+	// LWS can create headless service if we set `serviceName` in spec, but here we might want to keep using our own logic
+	// or let LWS handle it.
+	// For compatibility with existing service discovery (EntryAddressEnv), we should ensure the service exists.
+	// CreatePodsByRole creates a headless service for workers.
+	serviceSelector := map[string]string{
+		workloadv1alpha1.GroupNameLabelKey: servingGroupName,
+		workloadv1alpha1.RoleLabelKey:      role.Name,
+		workloadv1alpha1.RoleIDKey:         utils.GenerateRoleID(role.Name, roleIndex),
+		workloadv1alpha1.EntryLabelKey:     utils.Entry,
+	}
+	if role.WorkerTemplate != nil {
+		if err := utils.CreateHeadlessService(ctx, c.kubeClientSet, mi, serviceSelector, servingGroupName, role.Name, roleIndex); err != nil {
+			return fmt.Errorf("failed to create headless service: %v", err)
+		}
+	}
+
+	return nil
+}
+
 func (c *ModelServingController) deleteServingGroup(ctx context.Context, mi *workloadv1alpha1.ModelServing, servingGroupName string) error {
 	status := c.store.GetServingGroupStatus(utils.GetNamespaceName(mi), servingGroupName)
 	if status == datastore.ServingGroupNotFound {
@@ -1194,7 +1299,19 @@ func (c *ModelServingController) deleteServingGroup(ctx context.Context, mi *wor
 	selector := labels.SelectorFromSet(map[string]string{
 		workloadv1alpha1.GroupNameLabelKey: servingGroupName,
 	})
-	err := c.kubeClientSet.CoreV1().Pods(mi.Namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+
+	// Delete LeaderWorkerSets
+	gvr := schema.GroupVersionResource{Group: "leaderworkerset.x-k8s.io", Version: "v1", Resource: "leaderworkersets"}
+	err := c.dynamicClient.Resource(gvr).Namespace(mi.Namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
+	if err != nil && !apierrors.IsNotFound(err) {
+		klog.Errorf("failed to delete LWS collection for ServingGroup %s: %v", servingGroupName, err)
+		// We continue to try deleting pods even if LWS deletion fails,
+		// but ideally we should ensure LWS is gone.
+	}
+
+	err = c.kubeClientSet.CoreV1().Pods(mi.Namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
 		LabelSelector: selector.String(),
 	})
 	if err != nil {

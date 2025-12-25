@@ -28,6 +28,7 @@ import (
 	modelserving "github.com/volcano-sh/kthena/pkg/model-serving-controller/controller"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
@@ -51,12 +52,13 @@ func SetupController(ctx context.Context, cc Config) {
 	}
 	kubeClient := kubernetes.NewForConfigOrDie(config)
 	client := clientset.NewForConfigOrDie(config)
+	dynamicClient := dynamic.NewForConfigOrDie(config)
 	volcanoClient, err := volcanoClientSet.NewForConfig(config)
 	if err != nil {
 		klog.Fatalf("failed to create volcano client: %v", err)
 	}
 	mc := modelbooster.NewModelBoosterController(kubeClient, client)
-	msc, err := modelserving.NewModelServingController(kubeClient, client, volcanoClient)
+	msc, err := modelserving.NewModelServingController(kubeClient, client, volcanoClient, dynamicClient)
 	if err != nil {
 		klog.Fatalf("failed to create ModelServing controller: %v", err)
 	}
