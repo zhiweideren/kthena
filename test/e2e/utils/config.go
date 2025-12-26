@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -60,6 +61,42 @@ func LoadYAMLFromFile[T any](path string) *T {
 	}
 
 	return &obj
+}
+
+// LoadMultiResourceYAMLFromFile loads a multi-resource YAML file from a path relative to the project root
+// and returns all resources as a slice of the specified type.
+// The YAML file can contain multiple resources separated by "---".
+func LoadMultiResourceYAMLFromFile[T any](path string) []*T {
+	_, filename, _, _ := runtime.Caller(1)
+	// Get project root (3 levels up from test/e2e/utils/config.go)
+	projectRoot := filepath.Join(filepath.Dir(filename), "..", "..", "..")
+	absPath := filepath.Join(projectRoot, path)
+
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to read YAML file from project root: %s (abs: %s): %v", path, absPath, err))
+	}
+
+	// Split by "---" to get individual resources
+	docs := strings.Split(string(data), "---")
+	var results []*T
+
+	for i, doc := range docs {
+		doc = strings.TrimSpace(doc)
+		if doc == "" {
+			continue
+		}
+
+		// Use the same logic as LoadYAMLFromFile for each resource
+		var obj T
+		if err := yaml.Unmarshal([]byte(doc), &obj); err != nil {
+			panic(fmt.Sprintf("Failed to unmarshal YAML resource %d in file: %s: %v", i+1, absPath, err))
+		}
+
+		results = append(results, &obj)
+	}
+
+	return results
 }
 
 // RandomString generates a random string of length n.
