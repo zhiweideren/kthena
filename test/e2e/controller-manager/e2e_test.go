@@ -48,6 +48,7 @@ func TestMain(m *testing.M) {
 
 	if err := framework.InstallKthena(config); err != nil {
 		fmt.Printf("Failed to install kthena: %v\n", err)
+		_ = framework.UninstallKthena(config.Namespace)
 		os.Exit(1)
 	}
 
