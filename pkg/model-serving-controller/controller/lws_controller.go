@@ -25,10 +25,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	lwsv1 "sigs.k8s.io/lws/api/leaderworkerset/v1"
 
 	workloadv1alpha1 "github.com/volcano-sh/kthena/pkg/apis/workload/v1alpha1"
@@ -38,6 +44,77 @@ import (
 type LWSReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+}
+
+func StartLWSController(ctx context.Context, cfg *rest.Config) {
+	discoveryClient, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		klog.Errorf("Failed to create discovery client for LWS check: %v", err)
+		return
+	}
+
+	exists, err := resourceExists(discoveryClient, "leaderworkerset.x-k8s.io/v1", "LeaderWorkerSet")
+	if err != nil {
+		klog.Errorf("Failed to check LWS CRD existence: %v", err)
+		return
+	}
+	if !exists {
+		klog.Info("LeaderWorkerSet CRD not found, LWS support disabled")
+		return
+	}
+
+	s := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(s))
+	utilruntime.Must(workloadv1alpha1.AddToScheme(s))
+	utilruntime.Must(lwsv1.AddToScheme(s))
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: s,
+		Metrics: server.Options{
+			BindAddress: "0",
+		},
+		LeaderElection: false,
+	})
+	if err != nil {
+		klog.Errorf("unable to start manager for LWS: %v", err)
+		return
+	}
+
+	if err = (&LWSReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		klog.Errorf("unable to create LWS controller: %v", err)
+		return
+	}
+
+	klog.Info("Starting LeaderWorkerSet controller")
+	if err := mgr.Start(ctx); err != nil {
+		klog.Errorf("problem running LWS manager: %v", err)
+	}
+}
+
+func (r *LWSReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&lwsv1.LeaderWorkerSet{}).
+		Owns(&workloadv1alpha1.ModelServing{}).
+		Complete(r)
+}
+
+func resourceExists(client kubernetes.Interface, groupVersion string, kind string) (bool, error) {
+	resources, err := client.Discovery().ServerResourcesForGroupVersion(groupVersion)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	for _, r := range resources.APIResources {
+		if r.Kind == kind {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 //+kubebuilder:rbac:groups=leaderworkerset.x-k8s.io,resources=leaderworkersets,verbs=get;list;watch;create;update;patch;delete
@@ -171,11 +248,4 @@ func (r *LWSReconciler) updateLWSStatus(ctx context.Context, lws *lwsv1.LeaderWo
 		return r.Status().Update(ctx, lws)
 	}
 	return nil
-}
-
-func (r *LWSReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&lwsv1.LeaderWorkerSet{}).
-		Owns(&workloadv1alpha1.ModelServing{}).
-		Complete(r)
 }

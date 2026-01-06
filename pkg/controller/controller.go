@@ -26,24 +26,14 @@ import (
 	modelbooster "github.com/volcano-sh/kthena/pkg/model-booster-controller/controller"
 	"github.com/volcano-sh/kthena/pkg/model-booster-controller/utils"
 	modelserving "github.com/volcano-sh/kthena/pkg/model-serving-controller/controller"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/kubernetes"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog/v2"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	volcanoClientSet "volcano.sh/apis/pkg/client/clientset/versioned"
-
-	workloadv1alpha1 "github.com/volcano-sh/kthena/pkg/apis/workload/v1alpha1"
-	lwsv1 "sigs.k8s.io/lws/api/leaderworkerset/v1"
 )
 
 const (
@@ -74,9 +64,9 @@ func SetupController(ctx context.Context, cc Config) {
 	var msc *modelserving.ModelServingController
 	var ac *autoscaler.AutoscaleController
 
-	for ctrl, enable := range cc.Controllers {
+	for controller, enable := range cc.Controllers {
 		if enable {
-			switch ctrl {
+			switch controller {
 			case ModelBoosterController:
 				mc = modelbooster.NewModelBoosterController(kubeClient, client)
 			case ModelServingController:
@@ -102,9 +92,8 @@ func SetupController(ctx context.Context, cc Config) {
 		if msc != nil {
 			go msc.Run(ctx, cc.Workers)
 			klog.Info("ModelServing controller started")
-
-			// Start LWS Controller if ModelServing is enabled
-			go startLWSController(ctx, config)
+			go modelserving.StartLWSController(ctx, config)
+			klog.Info("ModelServing lws controller started")
 		}
 		if ac != nil {
 			go ac.Run(ctx)
@@ -177,72 +166,4 @@ func newResourceLock(client kubernetes.Interface) (*resourcelock.LeaseLock, erro
 			Identity: id,
 		},
 	}, nil
-}
-
-func startLWSController(ctx context.Context, cfg *rest.Config) {
-	// Check if LWS CRD exists
-	discoveryClient, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		klog.Errorf("Failed to create discovery client for LWS check: %v", err)
-		return
-	}
-
-	// Check for "leaderworkerset.x-k8s.io/v1"
-	exists, err := resourceExists(discoveryClient, "leaderworkerset.x-k8s.io/v1", "LeaderWorkerSet")
-	if err != nil {
-		klog.Errorf("Failed to check LWS CRD existence: %v", err)
-		// Don't return, maybe transient error? But safer to return or retry.
-		// For now, let's return.
-		return
-	}
-	if !exists {
-		klog.Info("LeaderWorkerSet CRD not found, LWS support disabled")
-		return
-	}
-
-	s := runtime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(s))
-	utilruntime.Must(workloadv1alpha1.AddToScheme(s))
-	utilruntime.Must(lwsv1.AddToScheme(s))
-
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: s,
-		Metrics: server.Options{
-			BindAddress: "0",
-		},
-		LeaderElection: false,
-	})
-	if err != nil {
-		klog.Errorf("unable to start manager for LWS: %v", err)
-		return
-	}
-
-	if err = (&modelserving.LWSReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		klog.Errorf("unable to create LWS controller: %v", err)
-		return
-	}
-
-	klog.Info("Starting LeaderWorkerSet controller")
-	if err := mgr.Start(ctx); err != nil {
-		klog.Errorf("problem running LWS manager: %v", err)
-	}
-}
-
-func resourceExists(client kubernetes.Interface, groupVersion string, kind string) (bool, error) {
-	resources, err := client.Discovery().ServerResourcesForGroupVersion(groupVersion)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	for _, r := range resources.APIResources {
-		if r.Kind == kind {
-			return true, nil
-		}
-	}
-	return false, nil
 }
