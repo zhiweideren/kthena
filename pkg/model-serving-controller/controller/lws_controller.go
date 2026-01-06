@@ -65,7 +65,7 @@ func StartLWSController(ctx context.Context, cfg *rest.Config) {
 
 	s := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(s))
-	utilruntime.Must(workloadv1alpha1.AddToScheme(s))
+	utilruntime.Must(workloadv1alpha1.Install(s))
 	utilruntime.Must(lwsv1.AddToScheme(s))
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
