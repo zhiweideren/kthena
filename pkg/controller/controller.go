@@ -64,9 +64,9 @@ func SetupController(ctx context.Context, cc Config) {
 	var msc *modelserving.ModelServingController
 	var ac *autoscaler.AutoscaleController
 
-	for ctrl, enable := range cc.Controllers {
+	for controller, enable := range cc.Controllers {
 		if enable {
-			switch ctrl {
+			switch controller {
 			case ModelBoosterController:
 				mc = modelbooster.NewModelBoosterController(kubeClient, client)
 			case ModelServingController:
@@ -92,6 +92,8 @@ func SetupController(ctx context.Context, cc Config) {
 		if msc != nil {
 			go msc.Run(ctx, cc.Workers)
 			klog.Info("ModelServing controller started")
+			go modelserving.StartLWSController(ctx, config)
+			klog.Info("ModelServing lws controller started")
 		}
 		if ac != nil {
 			go ac.Run(ctx)

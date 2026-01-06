@@ -98,6 +98,13 @@ func InstallKthena(cfg *KthenaConfig) error {
 	waitCmd.Stdout = os.Stdout
 	waitCmd.Stderr = os.Stderr
 	if err := waitCmd.Run(); err != nil {
+		fmt.Printf("Wait for pods failed. Dumping pod status in namespace %s:\n", cfg.Namespace)
+		_ = exec.Command("kubectl", "get", "pods", "-n", cfg.Namespace, "-o", "wide").Run()
+		_ = exec.Command("kubectl", "describe", "pods", "-n", cfg.Namespace).Run()
+		// Attempt to get logs from all pods
+		fmt.Println("Dumping pod logs:")
+		_ = exec.Command("kubectl", "logs", "-l", "app.kubernetes.io/instance=kthena", "-n", cfg.Namespace, "--all-containers=true", "--tail=50").Run()
+
 		return fmt.Errorf("failed to wait for kthena pods: %v", err)
 	}
 
