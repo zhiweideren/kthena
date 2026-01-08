@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	networkingv1alpha1 "github.com/volcano-sh/kthena/pkg/apis/networking/v1alpha1"
 	"github.com/volcano-sh/kthena/test/e2e/framework"
+	"github.com/volcano-sh/kthena/test/e2e/router"
 	routercontext "github.com/volcano-sh/kthena/test/e2e/router/context"
 	"github.com/volcano-sh/kthena/test/e2e/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -98,41 +99,28 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// TestModelRouteBindingGateway tests a ModelRoute binding to a Gateway.
-func TestModelRouteBindingGateway(t *testing.T) {
-	ctx := context.Background()
+// TestModelRouteSimple tests a simple ModelRoute deployment and access.
+// This test runs the shared test function with Gateway API enabled (with ParentRefs).
+func TestModelRouteSimple(t *testing.T) {
+	router.TestModelRouteSimpleShared(t, testCtx, testNamespace, true, kthenaNamespace)
+}
 
-	// 1. Deploy ModelRoute
-	t.Log("Deploying ModelRoute binding to Gateway...")
-	modelRoute := utils.LoadYAMLFromFile[networkingv1alpha1.ModelRoute]("examples/kthena-router/ModelRoute-binding-gateway.yaml")
-	modelRoute.Namespace = testNamespace
+// TestModelRouteMultiModels tests ModelRoute with multiple models.
+// This test runs the shared test function with Gateway API enabled (with ParentRefs).
+func TestModelRouteMultiModels(t *testing.T) {
+	router.TestModelRouteMultiModelsShared(t, testCtx, testNamespace, true, kthenaNamespace)
+}
 
-	// Update the parentRef namespace to match the kthena installation namespace
-	ktNamespace := gatewayv1.Namespace(kthenaNamespace)
-	if len(modelRoute.Spec.ParentRefs) > 0 {
-		modelRoute.Spec.ParentRefs[0].Namespace = &ktNamespace
-	}
+// TestModelRoutePrefillDecodeDisaggregation tests PD disaggregation with ModelServing, ModelServer, and ModelRoute.
+// This test runs the shared test function with Gateway API enabled (with ParentRefs).
+func TestModelRoutePrefillDecodeDisaggregation(t *testing.T) {
+	router.TestModelRoutePrefillDecodeDisaggregationShared(t, testCtx, testNamespace, true, kthenaNamespace)
+}
 
-	createdModelRoute, err := testCtx.KthenaClient.NetworkingV1alpha1().ModelRoutes(testNamespace).Create(ctx, modelRoute, metav1.CreateOptions{})
-	require.NoError(t, err, "Failed to create ModelRoute")
-	assert.NotNil(t, createdModelRoute)
-	t.Logf("Created ModelRoute: %s/%s", createdModelRoute.Namespace, createdModelRoute.Name)
-
-	// Register cleanup
-	t.Cleanup(func() {
-		cleanupCtx := context.Background()
-		if err := testCtx.KthenaClient.NetworkingV1alpha1().ModelRoutes(testNamespace).Delete(cleanupCtx, createdModelRoute.Name, metav1.DeleteOptions{}); err != nil {
-			t.Logf("Warning: Failed to delete ModelRoute %s/%s: %v", createdModelRoute.Namespace, createdModelRoute.Name, err)
-		}
-	})
-
-	// 2. Test accessing the model route
-	// Note: We still use the default router URL because in E2E we port-forward to the router service,
-	// which handles both raw and Gateway API routes.
-	messages := []utils.ChatMessage{
-		utils.NewChatMessage("user", "Hello Gateway API"),
-	}
-	utils.CheckChatCompletions(t, modelRoute.Spec.ModelName, messages)
+// TestModelRouteSubset tests ModelRoute with subset routing.
+// This test runs the shared test function with Gateway API enabled (with ParentRefs).
+func TestModelRouteSubset(t *testing.T) {
+	router.TestModelRouteSubsetShared(t, testCtx, testNamespace, true, kthenaNamespace)
 }
 
 // TestDuplicateModelName tests that the same modelName can route to different backend models
