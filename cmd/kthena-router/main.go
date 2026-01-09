@@ -54,11 +54,6 @@ func main() {
 	)
 
 	klog.InitFlags(nil)
-	// Some dependencies can override the klog logger via init(), which breaks
-	// verbosity flags. Reset the logger to its default state to fix this.
-	// NOTE: klog.ClearLogger() is meant for tests, but is a viable fix here.
-	// See issue #624.
-	klog.ClearLogger()
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.StringVar(&routerPort, "port", "8080", "Server listen port")
 	pflag.StringVar(&tlsCert, "tls-cert", "", "TLS certificate file path")
