@@ -40,20 +40,27 @@ func (f *fakePodLister) List(selector labels.Selector) ([]*corev1.Pod, error) {
 }
 
 func (f *fakePodLister) Pods(namespace string) listerv1.PodNamespaceLister {
-	return &fakePodNamespaceLister{pods: f.pods}
+	return &fakePodNamespaceLister{pods: f.pods, namespace: namespace}
 }
 
 type fakePodNamespaceLister struct {
-	pods []*corev1.Pod
+	pods      []*corev1.Pod
+	namespace string
 }
 
 func (f *fakePodNamespaceLister) List(selector labels.Selector) ([]*corev1.Pod, error) {
-	return f.pods, nil
+	var filtered []*corev1.Pod
+	for _, pod := range f.pods {
+		if pod.Namespace == f.namespace && selector.Matches(labels.Set(pod.Labels)) {
+			filtered = append(filtered, pod)
+		}
+	}
+	return filtered, nil
 }
 
 func (f *fakePodNamespaceLister) Get(name string) (*corev1.Pod, error) {
 	for _, p := range f.pods {
-		if p.Name == name {
+		if p.Namespace == f.namespace && p.Name == name {
 			return p, nil
 		}
 	}
@@ -94,7 +101,7 @@ func TestGetTargetLabels(t *testing.T) {
 }
 
 func TestGetMetricPods(t *testing.T) {
-	pod := &corev1.Pod{
+	pod1 := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pod1",
 			Namespace: "default",
@@ -105,20 +112,56 @@ func TestGetMetricPods(t *testing.T) {
 		},
 	}
 
+	pod2 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod2",
+			Namespace: "other-namespace",
+			Labels: map[string]string{
+				workload.ModelServingNameLabelKey: "model1",
+				workload.EntryLabelKey:            Entry,
+			},
+		},
+	}
+
 	lister := &fakePodLister{
-		pods: []*corev1.Pod{pod},
+		pods: []*corev1.Pod{pod1, pod2},
 	}
 
 	target := &workload.Target{}
 	target.TargetRef.Name = "model1"
 	target.TargetRef.Kind = workload.ModelServingKind.Kind
 
+	// Test filtering by "default" namespace
 	pods, err := GetMetricPods(lister, "default", target)
 	if err != nil {
-		t.Fatalf("unexpected error")
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(pods) != 1 {
-		t.Fatalf("expected 1 pod")
+		t.Fatalf("expected 1 pod in default namespace, got %d", len(pods))
+	}
+	if pods[0].Name != "pod1" {
+		t.Fatalf("expected pod1, got %s", pods[0].Name)
+	}
+
+	// Test filtering by "other-namespace"
+	pods, err = GetMetricPods(lister, "other-namespace", target)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pods) != 1 {
+		t.Fatalf("expected 1 pod in other-namespace, got %d", len(pods))
+	}
+	if pods[0].Name != "pod2" {
+		t.Fatalf("expected pod2, got %s", pods[0].Name)
+	}
+
+	// Test filtering by non-existent namespace
+	pods, err = GetMetricPods(lister, "non-existent", target)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pods) != 0 {
+		t.Fatalf("expected 0 pods in non-existent namespace, got %d", len(pods))
 	}
 }
 
