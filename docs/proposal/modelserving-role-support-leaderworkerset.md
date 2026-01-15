@@ -6,7 +6,7 @@ This proposal aims to extend the capabilities of Kthena ModelServing to directly
 
 ## Motivation
 
-Many multi-host inference stacks and ecosystem tools have standardized on using LeaderWorkerSet (LWS) as the API for workload description. To reduce migration costs for users and provide more flexible usage, ModelServing should be able to "compatible" with the LWS API. In this way, users can use the standard LWS CRD to define tasks, while underlying Pod management, lifecycle maintenance, and advanced features (such as service routing, auto-scaling) are unified and taken over by Kthena ModelServing.
+Many multi-host inference stacks and ecosystem tools have standardized on using LeaderWorkerSet (LWS) as the API for workload description. To reduce migration costs for users and provide more flexible usage, ModelServing should be able to "compatible" with the LWS API. In this way, users can use the standard LWS CRD to define tasks, while underlying Pod management, lifecycle maintenance, and advanced features (such as service routing, auto-scaling) are unified and taken over by Kthena ModelServing.This benefits those lws users from migrating to kthena smoothly.
 
 ### Goals
 
@@ -86,7 +86,7 @@ Implement logic to write system running status back to LWS Status.
 |-------------------------------|--------------------------------|----------|
 | `metadata.name` | `ModelServing Name` | Mapped to the corresponding ModelServing identifier |
 | `spec.replicas` | `spec.replicas` | Defines the number of replicas for ServingGroup |
-| `spec.leaderWorkerTemplate.leaderTemplate` | `spec.template.roles[Leader]` | Parsed as Leader role definition, usually corresponds to Entry Pod |
+| `spec.leaderWorkerTemplate.leaderTemplate` | `spec.template.roles[Leader]` | Parsed as Leader role definition. If nil, use workerTemplate as Entry Pod. |
 | `spec.leaderWorkerTemplate.workerTemplate` | `spec.template.roles[Worker]` | Parsed as Worker role definition |
 | `spec.leaderWorkerTemplate.size` | `Worker Role Replicas` | Used to calculate replica count for Worker Role: `Replicas = Size - 1` (Assuming Leader is 1) |
 | `spec.startupPolicy` | `Startup Policy` | Maps startup order policy (e.g., LeaderFirst) |

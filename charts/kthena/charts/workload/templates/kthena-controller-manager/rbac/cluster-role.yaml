@@ -154,9 +154,7 @@ rules:
       - leaderworkersets
       - leaderworkersets/status
     verbs:
-      - create
       - get
       - list
       - watch
       - update
-      - delete

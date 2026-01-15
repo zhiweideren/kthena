@@ -32,7 +32,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
-
 	lwsv1 "sigs.k8s.io/lws/api/leaderworkerset/v1"
 	lwsclientset "sigs.k8s.io/lws/client-go/clientset/versioned"
 	lwsinformers "sigs.k8s.io/lws/client-go/informers/externalversions"
@@ -153,7 +152,6 @@ func (c *LWSController) processNextWorkItem(ctx context.Context) bool {
 			return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
 		}
 		c.workqueue.Forget(key)
-		klog.Infof("Successfully synced '%s'", key)
 		return nil
 	}(key)
 
@@ -286,17 +284,21 @@ func (c *LWSController) constructModelServing(lws *lwsv1.LeaderWorkerSet) *workl
 	if lws.Spec.LeaderWorkerTemplate.Size != nil {
 		workerSize = *lws.Spec.LeaderWorkerTemplate.Size
 	}
-	workerReplicas := workerSize - 1
-	if workerReplicas < 0 {
-		workerReplicas = 0
-	}
+	workerReplicas := max(workerSize-1, 0)
 
 	roleReplicas := int32(1)
+
+	var leaderTemplate corev1.PodTemplateSpec
+	if lws.Spec.LeaderWorkerTemplate.LeaderTemplate != nil {
+		leaderTemplate = *lws.Spec.LeaderWorkerTemplate.LeaderTemplate
+	} else {
+		leaderTemplate = lws.Spec.LeaderWorkerTemplate.WorkerTemplate
+	}
 
 	role := workloadv1alpha1.Role{
 		Name:           "default",
 		Replicas:       &roleReplicas,
-		EntryTemplate:  convertTemplate(*lws.Spec.LeaderWorkerTemplate.LeaderTemplate),
+		EntryTemplate:  convertTemplate(leaderTemplate),
 		WorkerReplicas: workerReplicas,
 		WorkerTemplate: convertTemplatePtr(&lws.Spec.LeaderWorkerTemplate.WorkerTemplate),
 	}

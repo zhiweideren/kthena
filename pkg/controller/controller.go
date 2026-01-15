@@ -69,9 +69,9 @@ func SetupController(ctx context.Context, cc Config) {
 	var msc *modelserving.ModelServingController
 	var ac *autoscaler.AutoscaleController
 
-	for controller, enable := range cc.Controllers {
+	for ctrl, enable := range cc.Controllers {
 		if enable {
-			switch controller {
+			switch ctrl {
 			case ModelBoosterController:
 				mc = modelbooster.NewModelBoosterController(kubeClient, client)
 			case ModelServingController:
