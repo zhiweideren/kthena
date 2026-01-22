@@ -41,7 +41,7 @@ const (
 
 // CreateControllerRevision creates or retrieves a ControllerRevision for a specific revision.
 // In ModelServing, we typically have at most two revisions: CurrentRevision and UpdateRevision.
-func CreateControllerRevision(ctx context.Context, client kubernetes.Interface, mi *workloadv1alpha1.ModelServing, revision string, templateData interface{}) (*appsv1.ControllerRevision, error) {
+func CreateControllerRevision(ctx context.Context, client kubernetes.Interface, ms *workloadv1alpha1.ModelServing, revision string, templateData interface{}) (*appsv1.ControllerRevision, error) {
 	// Serialize template data
 	data, err := json.Marshal(templateData)
 	if err != nil {
@@ -49,7 +49,8 @@ func CreateControllerRevision(ctx context.Context, client kubernetes.Interface, 
 	}
 
 	// Check if ControllerRevision already exists
-	existing, err := client.AppsV1().ControllerRevisions(mi.Namespace).Get(ctx, revision, metav1.GetOptions{})
+	controllerRevisionName := GenerateControllerRevisionName(ms.GetName(), revision)
+	existing, err := client.AppsV1().ControllerRevisions(ms.Namespace).Get(ctx, controllerRevisionName, metav1.GetOptions{})
 	if err == nil {
 		// If already exists, check if data has changed
 		if string(existing.Data.Raw) != string(data) {
@@ -57,11 +58,11 @@ func CreateControllerRevision(ctx context.Context, client kubernetes.Interface, 
 				Raw: data,
 			}
 			existing.Revision++
-			updated, updateErr := client.AppsV1().ControllerRevisions(mi.Namespace).Update(ctx, existing, metav1.UpdateOptions{})
+			updated, updateErr := client.AppsV1().ControllerRevisions(ms.Namespace).Update(ctx, existing, metav1.UpdateOptions{})
 			if updateErr != nil {
 				return nil, fmt.Errorf("failed to update ControllerRevision: %v", updateErr)
 			}
-			klog.V(4).Infof("Updated ControllerRevision %s/%s with revision %s", mi.Namespace, revision, revision)
+			klog.V(4).Infof("Updated ControllerRevision %s/%s with revision %s", ms.Namespace, controllerRevisionName, revision)
 			return updated, nil
 		}
 		return existing, nil
@@ -72,14 +73,14 @@ func CreateControllerRevision(ctx context.Context, client kubernetes.Interface, 
 	// Create ControllerRevision
 	cr := &appsv1.ControllerRevision{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      revision,
-			Namespace: mi.Namespace,
+			Name:      controllerRevisionName,
+			Namespace: ms.Namespace,
 			Labels: map[string]string{
-				ControllerRevisionLabelKey:         mi.Name,
+				ControllerRevisionLabelKey:         ms.Name,
 				ControllerRevisionRevisionLabelKey: revision,
 			},
 			OwnerReferences: []metav1.OwnerReference{
-				newModelServingOwnerRef(mi),
+				newModelServingOwnerRef(ms),
 			},
 		},
 		Revision: 1, // ControllerRevision revision number
@@ -89,12 +90,12 @@ func CreateControllerRevision(ctx context.Context, client kubernetes.Interface, 
 	}
 
 	// Create ControllerRevision
-	created, err := client.AppsV1().ControllerRevisions(mi.Namespace).Create(ctx, cr, metav1.CreateOptions{})
+	created, err := client.AppsV1().ControllerRevisions(ms.Namespace).Create(ctx, cr, metav1.CreateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ControllerRevision: %v", err)
 	}
 
-	klog.V(4).Infof("Created ControllerRevision %s/%s with revision %s", mi.Namespace, revision, revision)
+	klog.V(4).Infof("Created ControllerRevision %s/%s with revision %s", ms.Namespace, controllerRevisionName, revision)
 	return created, nil
 }
 
@@ -102,11 +103,12 @@ func CreateControllerRevision(ctx context.Context, client kubernetes.Interface, 
 func GetControllerRevision(
 	ctx context.Context,
 	client kubernetes.Interface,
-	mi *workloadv1alpha1.ModelServing,
+	ms *workloadv1alpha1.ModelServing,
 	revision string,
 ) (*appsv1.ControllerRevision, error) {
 	//TODO: get it from a informer's store
-	cr, err := client.AppsV1().ControllerRevisions(mi.Namespace).Get(ctx, revision, metav1.GetOptions{})
+	controllerRevisionName := GenerateControllerRevisionName(ms.GetName(), revision)
+	cr, err := client.AppsV1().ControllerRevisions(ms.Namespace).Get(ctx, controllerRevisionName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, nil
@@ -136,14 +138,14 @@ func GetRolesFromControllerRevision(cr *appsv1.ControllerRevision) ([]workloadv1
 func CleanupOldControllerRevisions(
 	ctx context.Context,
 	client kubernetes.Interface,
-	mi *workloadv1alpha1.ModelServing,
+	ms *workloadv1alpha1.ModelServing,
 ) error {
 	// Get all ControllerRevisions for this ModelServing
 	selector := labels.SelectorFromSet(map[string]string{
-		ControllerRevisionLabelKey: mi.Name,
+		ControllerRevisionLabelKey: ms.Name,
 	})
 
-	list, err := client.AppsV1().ControllerRevisions(mi.Namespace).List(ctx, metav1.ListOptions{
+	list, err := client.AppsV1().ControllerRevisions(ms.Namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: selector.String(),
 	})
 	if err != nil {
@@ -152,11 +154,11 @@ func CleanupOldControllerRevisions(
 
 	// Get the revision names that must be preserved (CurrentRevision and UpdateRevision)
 	var currentRevisionName, updateRevisionName string
-	if mi.Status.CurrentRevision != "" {
-		currentRevisionName = mi.Status.CurrentRevision
+	if ms.Status.CurrentRevision != "" {
+		currentRevisionName = GenerateControllerRevisionName(ms.GetName(), ms.Status.CurrentRevision)
 	}
-	if mi.Status.UpdateRevision != "" {
-		updateRevisionName = mi.Status.UpdateRevision
+	if ms.Status.UpdateRevision != "" {
+		updateRevisionName = GenerateControllerRevisionName(ms.GetName(), ms.Status.UpdateRevision)
 	}
 
 	// Delete all revisions except CurrentRevision and UpdateRevision
@@ -169,18 +171,18 @@ func CleanupOldControllerRevisions(
 			continue
 		}
 
-		err := client.AppsV1().ControllerRevisions(mi.Namespace).Delete(ctx, revision.Name, metav1.DeleteOptions{})
+		err := client.AppsV1().ControllerRevisions(ms.Namespace).Delete(ctx, revision.Name, metav1.DeleteOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
-			klog.Warningf("Failed to delete old ControllerRevision %s/%s: %v", mi.Namespace, revision.Name, err)
+			klog.Warningf("Failed to delete old ControllerRevision %s/%s: %v", ms.Namespace, revision.Name, err)
 		} else {
 			deletedCount++
-			klog.V(4).Infof("Deleted old ControllerRevision %s/%s", mi.Namespace, revision.Name)
+			klog.V(4).Infof("Deleted old ControllerRevision %s/%s", ms.Namespace, revision.Name)
 		}
 	}
 
 	if deletedCount > 0 {
 		klog.V(4).Infof("Cleaned up %d old ControllerRevisions for ModelServing %s/%s (preserved CurrentRevision=%s, UpdateRevision=%s)",
-			deletedCount, mi.Namespace, mi.Name, mi.Status.CurrentRevision, mi.Status.UpdateRevision)
+			deletedCount, ms.Namespace, ms.Name, ms.Status.CurrentRevision, ms.Status.UpdateRevision)
 	}
 
 	return nil

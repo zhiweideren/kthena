@@ -88,6 +88,10 @@ func generateEntryPodName(groupName, roleName string) string {
 	return groupName + "-" + roleName + "-" + "0"
 }
 
+func GenerateControllerRevisionName(msName, revision string) string {
+	return msName + "-" + revision
+}
+
 func generateWorkerPodName(groupName, roleName string, podIndex int) string {
 	// worker-pod number starts from 1
 	// For example, WorkerPodName is vllm-sample-0-prefill-1-1, represents the first worker-pod in the second replica of the prefill role

@@ -32,7 +32,7 @@ func TestCreateControllerRevision(t *testing.T) {
 	ctx := context.Background()
 	client := kubefake.NewSimpleClientset()
 
-	mi := &workloadv1alpha1.ModelServing{
+	ms := &workloadv1alpha1.ModelServing{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-ms",
 			Namespace: "default",
@@ -53,13 +53,13 @@ func TestCreateControllerRevision(t *testing.T) {
 		},
 	}
 
-	templateData := mi.Spec.Template.Roles
+	templateData := ms.Spec.Template.Roles
 
 	// Test creating a ControllerRevision
-	cr, err := CreateControllerRevision(ctx, client, mi, "revision-v1", templateData)
+	cr, err := CreateControllerRevision(ctx, client, ms, "revision-v1", templateData)
 	assert.NoError(t, err)
 	assert.NotNil(t, cr)
-	assert.Equal(t, "revision-v1", cr.Name)
+	assert.Equal(t, "test-ms-revision-v1", cr.Name)
 	assert.Equal(t, "default", cr.Namespace)
 	assert.Equal(t, "test-ms", cr.Labels[ControllerRevisionLabelKey])
 	assert.Equal(t, "revision-v1", cr.Labels[ControllerRevisionRevisionLabelKey])
@@ -69,7 +69,7 @@ func TestGetControllerRevision(t *testing.T) {
 	ctx := context.Background()
 	client := kubefake.NewSimpleClientset()
 
-	mi := &workloadv1alpha1.ModelServing{
+	ms := &workloadv1alpha1.ModelServing{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-ms",
 			Namespace: "default",
@@ -90,20 +90,20 @@ func TestGetControllerRevision(t *testing.T) {
 		},
 	}
 
-	templateData := mi.Spec.Template.Roles
+	templateData := ms.Spec.Template.Roles
 
 	// Create multiple ControllerRevisions
 	revisions := []string{"revision-v1", "revision-v2", "revision-v3"}
 	for _, rev := range revisions {
-		_, err := CreateControllerRevision(ctx, client, mi, rev, templateData)
+		_, err := CreateControllerRevision(ctx, client, ms, rev, templateData)
 		assert.NoError(t, err)
 	}
 
 	// GetControllerRevision should return the ControllerRevision
-	cr, err := GetControllerRevision(ctx, client, mi, "revision-v2")
+	cr, err := GetControllerRevision(ctx, client, ms, "revision-v2")
 	assert.NoError(t, err)
 	assert.NotNil(t, cr)
-	assert.Equal(t, "revision-v2", cr.Name)
+	assert.Equal(t, "test-ms-revision-v2", cr.Name)
 	assert.Equal(t, "revision-v2", cr.Labels[ControllerRevisionRevisionLabelKey])
 }
 
@@ -113,7 +113,7 @@ func TestCleanupOldControllerRevisions_PreservesCurrentAndUpdateRevisions(t *tes
 	ctx := context.Background()
 	client := kubefake.NewSimpleClientset()
 
-	mi := &workloadv1alpha1.ModelServing{
+	ms := &workloadv1alpha1.ModelServing{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-ms",
 			Namespace: "default",
@@ -139,32 +139,32 @@ func TestCleanupOldControllerRevisions_PreservesCurrentAndUpdateRevisions(t *tes
 		},
 	}
 
-	templateData := mi.Spec.Template.Roles
+	templateData := ms.Spec.Template.Roles
 
 	// Create a few revisions to test cleanup
 	// The revisions that are not CurrentRevision or UpdateRevision should be deleted
 	revisions := []string{"revision-v1", "revision-v2", "revision-v3", "revision-v4", "revision-v5"}
 	for _, rev := range revisions {
-		_, err := CreateControllerRevision(ctx, client, mi, rev, templateData)
+		_, err := CreateControllerRevision(ctx, client, ms, rev, templateData)
 		assert.NoError(t, err)
 	}
 
 	// Manually run cleanup
-	err := CleanupOldControllerRevisions(ctx, client, mi)
+	err := CleanupOldControllerRevisions(ctx, client, ms)
 	assert.NoError(t, err)
 
 	// List all remaining ControllerRevisions
 	selector := labels.SelectorFromSet(map[string]string{
-		ControllerRevisionLabelKey: mi.Name,
+		ControllerRevisionLabelKey: ms.Name,
 	})
-	list, err := client.AppsV1().ControllerRevisions(mi.Namespace).List(ctx, metav1.ListOptions{
+	list, err := client.AppsV1().ControllerRevisions(ms.Namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: selector.String(),
 	})
 	assert.NoError(t, err)
 
 	// Verify CurrentRevision and UpdateRevision are preserved
-	currentRevisionName := mi.Status.CurrentRevision
-	updateRevisionName := mi.Status.UpdateRevision
+	currentRevisionName := GenerateControllerRevisionName(ms.GetName(), ms.Status.CurrentRevision)
+	updateRevisionName := GenerateControllerRevisionName(ms.GetName(), ms.Status.UpdateRevision)
 
 	remainingRevisionNames := make(map[string]bool)
 	for _, cr := range list.Items {
@@ -172,14 +172,14 @@ func TestCleanupOldControllerRevisions_PreservesCurrentAndUpdateRevisions(t *tes
 	}
 
 	// CurrentRevision should be preserved even though it's old
-	currentCR, err := GetControllerRevision(ctx, client, mi, mi.Status.CurrentRevision)
+	currentCR, err := GetControllerRevision(ctx, client, ms, ms.Status.CurrentRevision)
 	assert.NoError(t, err, "CurrentRevision should be preserved")
 	assert.NotNil(t, currentCR, "CurrentRevision ControllerRevision should exist")
 	assert.True(t, remainingRevisionNames[currentRevisionName],
 		"CurrentRevision %s should be in remaining revisions", currentRevisionName)
 
 	// UpdateRevision should be preserved even though it's old
-	updateCR, err := GetControllerRevision(ctx, client, mi, mi.Status.UpdateRevision)
+	updateCR, err := GetControllerRevision(ctx, client, ms, ms.Status.UpdateRevision)
 	assert.NoError(t, err, "UpdateRevision should be preserved")
 	assert.NotNil(t, updateCR, "UpdateRevision ControllerRevision should exist")
 	assert.True(t, remainingRevisionNames[updateRevisionName],
