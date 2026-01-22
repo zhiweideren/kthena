@@ -184,29 +184,33 @@ func min(a, b time.Duration) time.Duration {
 	return b
 }
 
-// WaitForRouterReady polls the router until it can successfully route requests.
-// This handles router reconciliation time without consuming rate-limited tokens.
-func WaitForRouterReady(t *testing.T, modelName string, messages []ChatMessage) {
+// WaitForModelRouteReconciled waits for a ModelRoute to be reconciled and ready to serve requests.
+// Returns the number of tokens consumed during verification (for rate limit accounting).
+func WaitForModelRouteReconciled(t *testing.T, modelName string, messages []ChatMessage, tokensPerRequest int) int {
 	maxAttempts := 20
 	backoff := 1 * time.Second
+	tokensConsumed := 0
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		resp := SendChatRequestWithURL(t, DefaultRouterURL, modelName, messages)
 		resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
-			t.Logf("Router is ready for model '%s' (attempt %d/%d)", modelName, attempt+1, maxAttempts)
-			return
+			tokensConsumed += tokensPerRequest
+			t.Logf("ModelRoute '%s' reconciled and ready (attempt %d/%d, consumed %d tokens)",
+				modelName, attempt+1, maxAttempts, tokensConsumed)
+			return tokensConsumed
 		}
 
 		if attempt < maxAttempts-1 {
-			t.Logf("Router not ready yet (attempt %d/%d, status %d), retrying in %v...",
+			t.Logf("ModelRoute not ready yet (attempt %d/%d, status %d), retrying in %v...",
 				attempt+1, maxAttempts, resp.StatusCode, backoff)
 			time.Sleep(backoff)
 		}
 	}
 
-	t.Fatalf("Router not ready after %d attempts for model '%s'", maxAttempts, modelName)
+	t.Fatalf("ModelRoute '%s' not reconciled after %d attempts", modelName, maxAttempts)
+	return 0
 }
 
 // NewChatMessage creates a new chat message
