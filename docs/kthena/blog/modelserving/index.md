@@ -60,7 +60,7 @@ spec:
   replicas: 1  # servingGroup replicas
   template:
     restartGracePeriodSeconds: 60
-    gangpolicy:
+    gangPolicy:
       minRoleReplicas:
         prefill: 2
         decode: 2
